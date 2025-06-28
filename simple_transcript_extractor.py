@@ -62,12 +62,13 @@ class SimpleTranscriptExtractor:
         
         return segments
     
-    def save_transcript(self, segments, base_name, metadata):
-        """Save transcript in multiple formats"""
-        os.makedirs("transcripts", exist_ok=True)
+    def save_transcript(self, segments, video_id, metadata):
+        """Save transcript in multiple formats in organized structure"""
+        transcript_folder = f"data/{video_id}/transcripts"
+        os.makedirs(transcript_folder, exist_ok=True)
         
         # JSON format
-        json_path = f"transcripts/{base_name}.json"
+        json_path = f"{transcript_folder}/{video_id}.json"
         with open(json_path, 'w', encoding='utf-8') as f:
             json.dump({
                 "metadata": metadata,
@@ -76,7 +77,7 @@ class SimpleTranscriptExtractor:
             }, f, indent=2, ensure_ascii=False)
         
         # Text format
-        txt_path = f"transcripts/{base_name}.txt"
+        txt_path = f"{transcript_folder}/{video_id}.txt"
         with open(txt_path, 'w', encoding='utf-8') as f:
             f.write(f"Video: {metadata.get('title', 'Unknown')}\n")
             f.write(f"Uploader: {metadata.get('uploader', 'Unknown')}\n")
@@ -89,7 +90,7 @@ class SimpleTranscriptExtractor:
                 f.write(f"[{timestamp}] {speaker}: {text}\n")
         
         # SRT format
-        srt_path = f"transcripts/{base_name}.srt"
+        srt_path = f"{transcript_folder}/{video_id}.srt"
         with open(srt_path, 'w', encoding='utf-8') as f:
             for i, segment in enumerate(segments, 1):
                 start_time = self.format_srt_timestamp(segment["start"])
@@ -103,9 +104,13 @@ class SimpleTranscriptExtractor:
         
         return [json_path, txt_path, srt_path]
     
-    def extract_transcript(self, audio_path, youtube_url=None):
+    def extract_transcript(self, audio_path, youtube_url=None, video_id=None):
         """Extract transcript with speaker labels"""
         print(f"🎵 Processing: {audio_path}")
+        
+        # Extract video_id from audio path if not provided
+        if video_id is None:
+            video_id = Path(audio_path).stem
         
         # Get metadata
         metadata = {}
@@ -118,40 +123,7 @@ class SimpleTranscriptExtractor:
         segments = self.assign_speakers(result["segments"])
         
         # Save files
-        base_name = Path(audio_path).stem
-        output_files = self.save_transcript(segments, base_name, metadata)
+        output_files = self.save_transcript(segments, video_id, metadata)
         
         print(f"✅ Generated {len(output_files)} files")
         return segments, output_files
-
-def main():
-    """Main function for command line usage"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Extract transcript with speaker inference")
-    parser.add_argument("audio_path", help="Path to the audio file")
-    parser.add_argument("--youtube-url", help="Original YouTube URL for metadata")
-    parser.add_argument("--model", default="base", choices=["tiny", "base", "small", "medium", "large"], 
-                       help="Whisper model size (default: base)")
-    
-    args = parser.parse_args()
-    
-    if not os.path.exists(args.audio_path):
-        print(f"❌ Error: Audio file not found: {args.audio_path}")
-        return
-    
-    try:
-        extractor = SimpleTranscriptExtractor(model_size=args.model)
-        segments, output_files = extractor.extract_transcript(args.audio_path, args.youtube_url)
-        
-        print(f"\n🎉 Transcript extraction completed!")
-        print(f"📊 Found {len(segments)} transcript segments")
-        print(f"📁 Generated files:")
-        for file_path in output_files:
-            print(f"   - {file_path}")
-            
-    except Exception as e:
-        print(f"❌ Error during transcript extraction: {e}")
-
-if __name__ == "__main__":
-    main()
