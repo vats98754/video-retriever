@@ -1,2 +1,31 @@
+# Virtual environment
 venv/
-audio/*
+
+# Data directories - keep structure but ignore content
+data/*/audio/*
+data/*/transcripts/*
+data/*/vectors/*
+data/*/searches/*
+
+# Keep .gitkeep files to preserve directory structure
+!data/*/.gitkeep
+!data/*/audio/.gitkeep
+!data/*/transcripts/.gitkeep
+!data/*/vectors/.gitkeep
+!data/*/searches/.gitkeep
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
