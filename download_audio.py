@@ -6,9 +6,14 @@ def get_youtube_id(url):
     match = re.search(r"(?:v=|youtu\.be/|embed/)([A-Za-z0-9_-]{11})", url)
     return match.group(1) if match else "output"
 
-def download_audio(youtube_url, output_path=None, audio_folder='audio'):
+def download_audio(youtube_url, output_path=None, video_id=None):
+    if video_id is None:
+        video_id = get_youtube_id(youtube_url)
     if output_path is None:
-        output_path = get_youtube_id(youtube_url) + '.mp3'
+        output_path = f"{video_id}.mp3"
+    
+    # Create organized data structure
+    audio_folder = f"data/{video_id}/audio"
     os.makedirs(audio_folder, exist_ok=True)
     
     # Extract filename without extension for yt-dlp template
