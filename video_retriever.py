@@ -12,11 +12,19 @@ from download_audio import download_audio, get_youtube_id
 from simple_transcript_extractor import SimpleTranscriptExtractor
 
 class VideoRetriever:
-    def __init__(self, model="base"):
+    def __init__(self, model="base", similarity_threshold=0.1, min_results=1):
         print("🚀 Loading models...")
         self.transcriber = SimpleTranscriptExtractor(model)
-        self.vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
-        print("✅ Ready")
+        self.vectorizer = TfidfVectorizer(
+            stop_words='english', 
+            max_features=1000,
+            ngram_range=(1, 2),  # Include bigrams for better matching
+            min_df=1,  # Include all terms
+            lowercase=True
+        )
+        self.similarity_threshold = similarity_threshold  # Minimum similarity score
+        self.min_results = min_results  # Minimum results to return per video
+        print(f"✅ Ready (similarity threshold: {similarity_threshold:.2f})")
     
     def chunk_segments(self, segments, chunk_size=6):
         """Combine segments into optimal chunks for search"""
@@ -50,7 +58,7 @@ class VideoRetriever:
         return chunks
     
     def search(self, chunks, query, top_k=5):
-        """Search using TF-IDF cosine similarity"""
+        """Enhanced search using TF-IDF cosine similarity with threshold filtering"""
         query_vec = self.vectorizer.transform([query])
         
         scores = []
@@ -58,12 +66,38 @@ class VideoRetriever:
             score = cosine_similarity(query_vec, chunk['vector'])[0][0]
             scores.append((score, chunk))
         
-        return sorted(scores, key=lambda x: x[0], reverse=True)[:top_k]
+        # Sort by similarity score (descending)
+        scores.sort(key=lambda x: x[0], reverse=True)
+        
+        # Filter by similarity threshold
+        filtered_scores = [(score, chunk) for score, chunk in scores if score >= self.similarity_threshold]
+        
+        # Ensure we have at least min_results if any results exist
+        if len(filtered_scores) < self.min_results and len(scores) > 0:
+            filtered_scores = scores[:self.min_results]
+        
+        # Print similarity analysis
+        print(f"\n📊 Similarity Analysis for query: '{query}'")
+        print(f"   Total chunks analyzed: {len(chunks)}")
+        print(f"   Chunks above threshold ({self.similarity_threshold:.2f}): {len(filtered_scores)}")
+        if filtered_scores:
+            max_score = filtered_scores[0][0]
+            min_score = filtered_scores[-1][0]
+            print(f"   Score range: {min_score:.3f} - {max_score:.3f}")
+        print("-" * 60)
+        
+        # Return top results
+        return filtered_scores[:top_k]
     
     def format_results(self, results, query, video_id=None, base_url=None):
-        """Format and display results with YouTube timestamps"""
-        print(f"\\n🎯 Top {len(results)} results for: '{query}'")
-        print("-" * 60)
+        """Format and display results with enhanced similarity information"""
+        if not results:
+            print(f"\n❌ No results found for: '{query}' (threshold: {self.similarity_threshold:.2f})")
+            return []
+        
+        print(f"\n🎯 Top {len(results)} results for: '{query}' (ranked by similarity)")
+        print(f"   Similarity threshold: {self.similarity_threshold:.2f}")
+        print("-" * 70)
         
         formatted = []
         for i, (score, chunk) in enumerate(results, 1):
@@ -78,9 +112,20 @@ class VideoRetriever:
             elif video_id:
                 youtube_url = f"https://youtu.be/{video_id}?t={int(chunk['start'])}s"
             
+            # Determine confidence level based on score
+            if score >= 0.5:
+                confidence = "🟢 HIGH"
+            elif score >= 0.3:
+                confidence = "🟡 MEDIUM"
+            elif score >= 0.1:
+                confidence = "🟠 LOW"
+            else:
+                confidence = "🔴 VERY LOW"
+            
             result = {
                 'rank': i,
                 'score': float(score),
+                'confidence': confidence,
                 'timestamp': timestamp,
                 'start': chunk['start'],
                 'end': chunk['end'],
@@ -90,10 +135,13 @@ class VideoRetriever:
                 'youtube_url': youtube_url
             }
             
-            print(f"{i}. [{timestamp}] ({score:.3f}) {', '.join(chunk['speakers'])}")
+            # Enhanced display with similarity percentage
+            percentage = score * 100
+            print(f"{i}. [{timestamp}] {confidence} ({percentage:.1f}% similarity)")
+            print(f"   👥 {', '.join(chunk['speakers'])} | ⏱️ {chunk['duration']:.1f}s")
             if youtube_url:
                 print(f"   🔗 {youtube_url}")
-            print(f"   {result['text']}")
+            print(f"   💬 {result['text']}")
             print()
             
             formatted.append(result)
@@ -139,7 +187,7 @@ class VideoRetriever:
         
         return vector_file
     
-    def search_video(self, url_or_id, query, top_k=5, chunk_size=6):
+    def search_video(self, url_or_id, query, top_k=5, chunk_size=6, preferred_language=None):
         """
         Complete end-to-end pipeline: URL/ID + Query → Timestamped YouTube URLs
         
@@ -148,12 +196,15 @@ class VideoRetriever:
             query: Search query string
             top_k: Number of results to return
             chunk_size: Segments per chunk
+            preferred_language: Preferred language for transcripts (e.g., 'en', 'es')
             
         Returns:
             List of results with timestamped YouTube URLs
         """
         print(f"🎬 Processing: {url_or_id}")
         print(f"🔍 Query: '{query}'")
+        if preferred_language:
+            print(f"🌐 Preferred language: {preferred_language}")
         
         # Extract video ID
         if url_or_id.startswith('http'):
@@ -183,8 +234,14 @@ class VideoRetriever:
                 print(f"📁 Using existing audio: {audio_file}")
                 audio_path = audio_file
             
-            # 2. Generate transcript
+            # 2. Generate transcript with language preference
             print("📝 Generating transcript...")
+            # Set language preference if specified
+            if preferred_language:
+                # Override the transcriber's language preference temporarily
+                original_fetch = self.transcriber.fetch_youtube_transcript
+                self.transcriber.fetch_youtube_transcript = lambda vid, langs=None: original_fetch(vid, [preferred_language, 'en'])
+            
             segments, transcript_files = self.transcriber.extract_transcript(
                 audio_path, youtube_url, video_id=video_id
             )
@@ -201,14 +258,38 @@ class VideoRetriever:
         chunks = self.chunk_segments(segments, chunk_size)
         vectorized_chunks = self.vectorize_chunks(chunks)
         
-        # 4. Perform search
+        # 4. Perform search with enhanced similarity analysis
         search_results = self.search(vectorized_chunks, query, top_k)
+        
+        if not search_results:
+            print(f"❌ No results found above similarity threshold ({self.similarity_threshold:.2f})")
+            print("💡 Try:")
+            print("   - Using different keywords")
+            print("   - Lowering the similarity threshold")
+            print("   - Using broader search terms")
+            return []
+        
         results = self.format_results(search_results, query, video_id=video_id)
         
-        # 5. Save results
+        # 5. Save results with similarity metadata
+        result_metadata = {
+            'similarity_threshold': self.similarity_threshold,
+            'total_chunks': len(vectorized_chunks),
+            'chunks_above_threshold': len(search_results),
+            'score_range': {
+                'max': float(search_results[0][0]) if search_results else 0,
+                'min': float(search_results[-1][0]) if search_results else 0
+            }
+        }
+        
+        # Add metadata to each result
+        for result in results:
+            result['similarity_metadata'] = result_metadata
+        
         self.save_data(video_id, vectorized_chunks, results, query, youtube_url)
         
-        print(f"\\n🎉 Search completed! Found {len(results)} timestamped results")
+        print(f"\n🎉 Search completed! Found {len(results)} high-quality timestamped results")
+        print(f"📊 Similarity range: {result_metadata['score_range']['min']:.3f} - {result_metadata['score_range']['max']:.3f}")
         return results
 
 def main():
@@ -219,13 +300,24 @@ def main():
     parser.add_argument("--top-k", type=int, default=5, help="Number of results to return (default: 5)")
     parser.add_argument("--chunk-size", type=int, default=6, help="Segments per chunk (default: 6)")
     parser.add_argument("--model", default="base", help="Whisper model size (default: base)")
+    parser.add_argument("--similarity-threshold", type=float, default=0.1, help="Minimum similarity score (0.0-1.0, default: 0.1)")
+    parser.add_argument("--min-results", type=int, default=1, help="Minimum results to return per video (default: 1)")
     parser.add_argument("--list-transcripts", action="store_true", help="List available transcripts for the video")
     parser.add_argument("--language", help="Preferred language for transcript (e.g., 'en', 'es', 'fr')")
     
     args = parser.parse_args()
     
+    # Validate similarity threshold
+    if not 0.0 <= args.similarity_threshold <= 1.0:
+        print("❌ Error: Similarity threshold must be between 0.0 and 1.0")
+        return
+    
     try:
-        retriever = VideoRetriever(args.model)
+        retriever = VideoRetriever(
+            model=args.model,
+            similarity_threshold=args.similarity_threshold,
+            min_results=args.min_results
+        )
         
         # Extract video ID for transcript listing
         if args.url_or_id.startswith('http'):
