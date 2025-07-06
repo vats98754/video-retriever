@@ -4,3 +4,6 @@ torch
 torchaudio
 scikit-learn
 youtube-transcript-api
+flask
+flask-socketio
+eventlet
