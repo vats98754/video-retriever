@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Video Retriever - AI-Powered YouTube Search</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='style.css') }}" rel="stylesheet">
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            overflow-x: hidden;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: relative;
+        }
+        
+        .gradient-bg::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="80" cy="20" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="40" cy="40" r="1" fill="rgba(255,255,255,0.1)"/><circle cx="90" cy="70" r="2" fill="rgba(255,255,255,0.1)"/><circle cx="10" cy="80" r="1" fill="rgba(255,255,255,0.1)"/></svg>');
+            animation: float 20s infinite ease-in-out;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(180deg); }
+        }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .glass-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .result-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border-left: 4px solid transparent;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .result-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .result-card:hover::before {
+            left: 100%;
+        }
+        
+        .result-card:hover {
+            transform: translateY(-4px) scale(1.02);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+            border-left-color: #667eea;
+        }
+        
+        .search-input {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        
+        .search-input:focus {
+            transform: scale(1.02);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1), 0 8px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .video-url-input {
+            animation: slideInLeft 0.5s ease;
+        }
+        
+        @keyframes slideInLeft {
+            from { transform: translateX(-20px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideInUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.7; transform: scale(1.1); }
+        }
+        
+        .video-thumbnail {
+            background: linear-gradient(45deg, #f3f4f6, #e5e7eb);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .video-thumbnail::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.2) 50%, transparent 70%);
+            transform: translateX(-100%);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .timestamp-badge {
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .speaker-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .speaker-badge::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s ease;
+        }
+        
+        .speaker-badge:hover::before {
+            left: 100%;
+        }
+        
+        .score-indicator {
+            background: linear-gradient(90deg, #10b981, #34d399);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .score-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #059669, #10b981, #34d399);
+            border-radius: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .score-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: scoreShimmer 2s infinite;
+        }
+        
+        @keyframes scoreShimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        .search-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .search-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%, rgba(255,255,255,0.1) 100%);
+            transform: translateX(-100%);
+            transition: transform 0.6s ease;
+        }
+        
+        .search-btn:hover::before {
+            transform: translateX(100%);
+        }
+        
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 15px 35px rgba(102, 126, 234, 0.4);
+        }
+        
+        .history-item {
+            animation: slideInUp 0.3s ease;
+            transition: all 0.2s ease;
+        }
+        
+        .history-item:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: progressShimmer 1.5s infinite;
+        }
+        
+        @keyframes progressShimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .status-connected {
+            animation: statusPulse 2s infinite;
+        }
+        
+        @keyframes statusPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+            50% { box-shadow: 0 0 0 4px rgba(34, 197, 94, 0); }
+        }
+        
+        .youtube-button {
+            background: linear-gradient(135deg, #ff0000, #cc0000);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .youtube-button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), transparent);
+            transform: scale(0);
+            transition: transform 0.3s ease;
+            border-radius: inherit;
+        }
+        
+        .youtube-button:hover::before {
+            transform: scale(1);
+        }
+        
+        .youtube-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(255, 0, 0, 0.3);
+        }
+        
+        /* Smooth scrolling for results */
+        .results-container {
+            scroll-behavior: smooth;
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5a67d8, #6b46c1);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-8 relative">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <div class="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+                        <i class="fas fa-video text-4xl text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-4xl font-bold mb-1">Video Retriever</h1>
+                        <p class="text-white/90 text-lg">AI-Powered YouTube Search with Timestamps</p>
+                        <p class="text-white/70 text-sm">Search across multiple videos • Get precise timestamps • Find exact moments</p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <div id="status-indicator" class="flex items-center space-x-3 bg-white/10 px-4 py-2 rounded-lg backdrop-blur-sm">
+                        <div class="w-3 h-3 bg-green-400 rounded-full pulse-dot"></div>
+                        <span class="text-sm font-medium">Ready</span>
+                    </div>
+                    <button onclick="clearResults()" class="text-white/80 hover:text-white transition-colors text-sm font-medium flex items-center space-x-2">
+                        <i class="fas fa-refresh"></i>
+                        <span>Reset</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Main Search Interface -->
+        <div class="glass-card rounded-2xl p-8 mb-8 shadow-xl">
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Search Across Multiple YouTube Videos</h2>
+                <p class="text-gray-600">Add YouTube URLs or video IDs, then ask any question to find timestamped moments</p>
+            </div>
+
+            <!-- Video URLs Input -->
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-link mr-2"></i>YouTube Videos
+                </label>
+                <div id="video-urls-container" class="space-y-3">
+                    <div class="video-url-input flex items-center space-x-3">
+                        <input type="text" 
+                               class="search-input flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+                               placeholder="https://youtu.be/... or video ID">
+                        <button onclick="removeVideoInput(this)" class="px-3 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <button onclick="addVideoInput()" class="mt-3 px-4 py-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors flex items-center space-x-2">
+                    <i class="fas fa-plus"></i>
+                    <span>Add Another Video</span>
+                </button>
+            </div>
+
+            <!-- Query Input -->
+            <div class="mb-6">
+                <label class="block text-sm font-semibold text-gray-700 mb-3">
+                    <i class="fas fa-search mr-2"></i>Search Query
+                </label>
+                <input type="text" 
+                       id="search-query" 
+                       class="search-input w-full px-4 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg" 
+                       placeholder="What are you looking for? (e.g., 'machine learning tips', 'interview advice', 'python examples')">
+                
+                <!-- Example queries -->
+                <div class="mt-3">
+                    <p class="text-xs text-gray-500 mb-2">Try these examples:</p>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="addExampleQuery('machine learning tips')" class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full hover:bg-purple-200 transition-colors">
+                            machine learning tips
+                        </button>
+                        <button onclick="addExampleQuery('interview preparation')" class="text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-200 transition-colors">
+                            interview preparation
+                        </button>
+                        <button onclick="addExampleQuery('coding examples')" class="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full hover:bg-green-200 transition-colors">
+                            coding examples
+                        </button>
+                        <button onclick="addExampleQuery('project management')" class="text-xs bg-yellow-100 text-yellow-700 px-3 py-1 rounded-full hover:bg-yellow-200 transition-colors">
+                            project management
+                        </button>
+                        <button onclick="addExampleQuery('data analysis')" class="text-xs bg-pink-100 text-pink-700 px-3 py-1 rounded-full hover:bg-pink-200 transition-colors">
+                            data analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Search Options -->
+            <div class="mb-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Search Configuration</h3>
+                    <button onclick="toggleAdvancedOptions()" id="advanced-toggle" class="text-purple-600 hover:text-purple-800 transition-colors text-sm font-medium flex items-center space-x-1">
+                        <i class="fas fa-cog"></i>
+                        <span>Advanced Options</span>
+                        <i class="fas fa-chevron-down transition-transform duration-200" id="advanced-chevron"></i>
+                    </button>
+                </div>
+                
+                <!-- Basic Options (Always Visible) -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Results per video:</label>
+                        <select id="top-k" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="3">3</option>
+                            <option value="5" selected>5</option>
+                            <option value="10">10</option>
+                            <option value="15">15</option>
+                            <option value="20">20</option>
+                        </select>
+                    </div>
+                    
+                    <div class="flex flex-col space-y-2">
+                        <label class="text-sm font-medium text-gray-700">Similarity threshold:</label>
+                        <select id="similarity-threshold" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="0.05">5% (Very Low)</option>
+                            <option value="0.1" selected>10% (Low)</option>
+                            <option value="0.15">15% (Medium-Low)</option>
+                            <option value="0.2">20% (Medium)</option>
+                            <option value="0.3">30% (High)</option>
+                            <option value="0.5">50% (Very High)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="flex flex-col justify-end">
+                        <button onclick="startSearch()" 
+                                id="search-btn"
+                                class="search-btn px-8 py-3 text-white rounded-xl font-semibold shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center space-x-3 transform hover:scale-105">
+                            <i class="fas fa-search text-lg"></i>
+                            <span class="text-lg">Search Videos</span>
+                            <div class="ml-2 w-0 h-0 border-l-4 border-l-white/70 border-y-2 border-y-transparent transition-all duration-300"></div>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Advanced Options (Collapsible) -->
+                <div id="advanced-options" class="hidden bg-gray-50 rounded-xl p-6 border border-gray-200">
+                    <h4 class="text-md font-semibold text-gray-700 mb-4 flex items-center">
+                        <i class="fas fa-sliders-h mr-2"></i>Advanced Configuration
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div class="flex flex-col space-y-2">
+                            <label class="text-sm font-medium text-gray-700">Chunk size:</label>
+                            <select id="chunk-size" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                <option value="3">3 segments</option>
+                                <option value="4">4 segments</option>
+                                <option value="6" selected>6 segments (default)</option>
+                                <option value="8">8 segments</option>
+                                <option value="10">10 segments</option>
+                            </select>
+                            <p class="text-xs text-gray-500">Smaller = more precise, Larger = more context</p>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="text-sm font-medium text-gray-700">Whisper model:</label>
+                            <select id="whisper-model" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                <option value="tiny">Tiny (fastest)</option>
+                                <option value="base" selected>Base (default)</option>
+                                <option value="small">Small (better)</option>
+                                <option value="medium">Medium (slower)</option>
+                                <option value="large">Large (best quality)</option>
+                            </select>
+                            <p class="text-xs text-gray-500">Only used for transcription fallback</p>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="text-sm font-medium text-gray-700">Min results per video:</label>
+                            <select id="min-results" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                <option value="1" selected>1 (default)</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="5">5</option>
+                            </select>
+                            <p class="text-xs text-gray-500">Guarantee minimum results even if below threshold</p>
+                        </div>
+                        
+                        <div class="flex flex-col space-y-2">
+                            <label class="text-sm font-medium text-gray-700">Preferred language:</label>
+                            <select id="preferred-language" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                                <option value="">Auto-detect</option>
+                                <option value="en" selected>English</option>
+                                <option value="es">Spanish</option>
+                                <option value="fr">French</option>
+                                <option value="de">German</option>
+                                <option value="it">Italian</option>
+                                <option value="pt">Portuguese</option>
+                                <option value="ja">Japanese</option>
+                                <option value="ko">Korean</option>
+                                <option value="zh">Chinese</option>
+                                <option value="ru">Russian</option>
+                                <option value="ar">Arabic</option>
+                                <option value="hi">Hindi</option>
+                            </select>
+                            <p class="text-xs text-gray-500">For YouTube captions preference</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Preset Configurations -->
+                    <div class="mt-6 pt-4 border-t border-gray-300">
+                        <h5 class="text-sm font-semibold text-gray-700 mb-3">Quick Presets:</h5>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="applyPreset('fast')" class="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm hover:bg-green-200 transition-colors">
+                                🚀 Fast Search
+                            </button>
+                            <button onclick="applyPreset('balanced')" class="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm hover:bg-blue-200 transition-colors">
+                                ⚖️ Balanced
+                            </button>
+                            <button onclick="applyPreset('quality')" class="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-sm hover:bg-purple-200 transition-colors">
+                                🎯 High Quality
+                            </button>
+                            <button onclick="applyPreset('precise')" class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-sm hover:bg-orange-200 transition-colors">
+                                🔍 Precise
+                            </button>
+                            <button onclick="resetToDefaults()" class="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm hover:bg-gray-200 transition-colors">
+                                🔄 Reset Defaults
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Indicator -->
+        <div id="progress-container" class="hidden glass-card rounded-2xl p-8 mb-8 shadow-xl fade-in">
+            <div class="flex items-center space-x-6 mb-6">
+                <div class="relative">
+                    <div class="animate-spin rounded-full h-12 w-12 border-4 border-purple-200 border-t-purple-600"></div>
+                    <div class="absolute inset-0 rounded-full h-12 w-12 border-4 border-transparent border-t-blue-600 animate-spin" style="animation-delay: -0.5s; animation-duration: 1.5s;"></div>
+                </div>
+                <div class="flex-1">
+                    <h3 class="font-bold text-xl text-gray-800 mb-2">Processing Videos...</h3>
+                    <p id="progress-text" class="text-gray-600 text-lg">Initializing search...</p>
+                    <p id="progress-detail" class="text-gray-500 text-sm mt-1">This may take a few moments depending on video length</p>
+                </div>
+                <div class="text-right">
+                    <div id="progress-percentage" class="text-2xl font-bold text-purple-600">0%</div>
+                    <div id="progress-eta" class="text-sm text-gray-500">Calculating...</div>
+                </div>
+            </div>
+            <div class="relative">
+                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div id="progress-bar" class="progress-bar h-3 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                </div>
+                <div class="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>Starting</span>
+                    <span id="current-step">Processing...</span>
+                    <span>Complete</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search History Sidebar -->
+        <div id="search-history" class="hidden glass-card rounded-2xl p-6 mb-8 shadow-xl">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-history mr-2"></i>Search History
+                </h3>
+                <button onclick="clearHistory()" class="text-gray-500 hover:text-red-500 transition-colors text-sm">
+                    <i class="fas fa-trash mr-1"></i>Clear All
+                </button>
+            </div>
+            <div id="history-list" class="space-y-3 custom-scrollbar max-h-96 overflow-y-auto">
+                <!-- History items will be populated here -->
+            </div>
+        </div>
+
+        <!-- Results Container -->
+        <div id="results-container" class="hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+                    <i class="fas fa-clock mr-3"></i>Timestamped Results
+                </h2>
+                <button onclick="clearResults()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <i class="fas fa-times mr-2"></i>Clear Results
+                </button>
+            </div>
+            
+            <div id="results-list" class="space-y-6">
+                <!-- Results will be populated here -->
+            </div>
+        </div>
+
+        <!-- No Results Message -->
+        <div id="no-results" class="hidden text-center py-16">
+            <div class="glass-card rounded-2xl p-12 shadow-xl max-w-2xl mx-auto">
+                <div class="w-24 h-24 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i class="fas fa-search text-gray-400 text-4xl"></i>
+                </div>
+                <h3 class="text-2xl font-bold text-gray-700 mb-4">No results found</h3>
+                <p class="text-gray-600 text-lg mb-6">We couldn't find any matching content in the videos you searched.</p>
+                
+                <div class="space-y-4">
+                    <div class="text-left">
+                        <h4 class="font-semibold text-gray-700 mb-2">Try these suggestions:</h4>
+                        <ul class="text-gray-600 space-y-2">
+                            <li class="flex items-center space-x-2">
+                                <i class="fas fa-check text-green-500 text-sm"></i>
+                                <span>Use different keywords or phrases</span>
+                            </li>
+                            <li class="flex items-center space-x-2">
+                                <i class="fas fa-check text-green-500 text-sm"></i>
+                                <span>Try broader search terms</span>
+                            </li>
+                            <li class="flex items-center space-x-2">
+                                <i class="fas fa-check text-green-500 text-sm"></i>
+                                <span>Add more videos to search across</span>
+                            </li>
+                            <li class="flex items-center space-x-2">
+                                <i class="fas fa-check text-green-500 text-sm"></i>
+                                <span>Check if the videos have transcripts available</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <button onclick="document.getElementById('search-query').focus()" class="mt-6 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all duration-300">
+                    Try Another Search
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let socket;
+        let sessionId;
+        let searchHistory = [];
+
+        // Initialize socket connection
+        function initializeSocket() {
+            socket = io();
+            
+            socket.on('connect', function() {
+                console.log('Connected to server');
+                updateStatus('Connected', 'green');
+                socket.emit('initialize_session');
+            });
+            
+            socket.on('disconnect', function() {
+                console.log('Disconnected from server');
+                updateStatus('Disconnected', 'red');
+            });
+            
+            socket.on('session_initialized', function(data) {
+                sessionId = data.session_id;
+                console.log('Session initialized:', sessionId);
+            });
+            
+            socket.on('search_progress', function(data) {
+                updateProgress(data.status);
+                if (data.progress) {
+                    updateProgressBar(data.progress);
+                }
+            });
+            
+            socket.on('search_complete', function(data) {
+                updateProgress(data.status);
+                setTimeout(() => {
+                    document.getElementById('progress-container').classList.add('hidden');
+                }, 2000);
+            });
+            
+            socket.on('search_error', function(data) {
+                console.error('Search error:', data.error);
+                updateProgress(`Error: ${data.error}`, true);
+            });
+        }
+
+        // Update status indicator
+        function updateStatus(text, color) {
+            const indicator = document.getElementById('status-indicator');
+            const dot = indicator.querySelector('div');
+            const span = indicator.querySelector('span');
+            
+            dot.className = `w-3 h-3 rounded-full ${color === 'green' ? 'bg-green-400 pulse-dot' : 'bg-red-400'}`;
+            span.textContent = text;
+        }
+
+        // Update progress with progress bar
+        function updateProgressBar(percentage) {
+            const progressBar = document.getElementById('progress-bar');
+            const progressPercentage = document.getElementById('progress-percentage');
+            const progressEta = document.getElementById('progress-eta');
+            const currentStep = document.getElementById('current-step');
+            
+            if (progressBar) {
+                progressBar.style.width = `${percentage}%`;
+            }
+            if (progressPercentage) {
+                progressPercentage.textContent = `${Math.round(percentage)}%`;
+            }
+            
+            // Update step indicator
+            if (currentStep) {
+                if (percentage < 25) {
+                    currentStep.textContent = "Preparing...";
+                } else if (percentage < 50) {
+                    currentStep.textContent = "Downloading...";
+                } else if (percentage < 75) {
+                    currentStep.textContent = "Transcribing...";
+                } else if (percentage < 90) {
+                    currentStep.textContent = "Searching...";
+                } else {
+                    currentStep.textContent = "Finalizing...";
+                }
+            }
+            
+            // Calculate estimated time remaining (mock calculation)
+            if (progressEta && percentage > 0 && percentage < 100) {
+                const estimated = Math.max(1, Math.round((100 - percentage) / 10));
+                progressEta.textContent = `~${estimated}s remaining`;
+            } else if (progressEta && percentage >= 100) {
+                progressEta.textContent = "Complete!";
+            }
+        }
+
+        // Update progress
+        function updateProgress(text, isError = false) {
+            const progressText = document.getElementById('progress-text');
+            if (progressText) {
+                progressText.textContent = text;
+                if (isError) {
+                    progressText.className = 'text-red-600';
+                } else {
+                    progressText.className = 'text-gray-600';
+                }
+            }
+        }
+
+        // Add video input field
+        function addVideoInput() {
+            const container = document.getElementById('video-urls-container');
+            const newInput = document.createElement('div');
+            newInput.className = 'video-url-input flex items-center space-x-3';
+            newInput.innerHTML = `
+                <input type="text" 
+                       class="search-input flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent" 
+                       placeholder="https://youtu.be/... or video ID">
+                <button onclick="removeVideoInput(this)" class="px-3 py-3 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(newInput);
+        }
+
+        // Remove video input field
+        function removeVideoInput(button) {
+            const container = document.getElementById('video-urls-container');
+            if (container.children.length > 1) {
+                button.parentElement.remove();
+            }
+        }
+
+        // Start search
+        async function startSearch() {
+            const videoInputs = document.querySelectorAll('.video-url-input input');
+            const query = document.getElementById('search-query').value.trim();
+            
+            // Get all configuration parameters
+            const config = getCurrentConfig();
+            
+            // Validate inputs
+            const videoUrls = Array.from(videoInputs)
+                .map(input => input.value.trim())
+                .filter(url => url !== '');
+            
+            if (videoUrls.length === 0) {
+                alert('Please add at least one YouTube video URL or ID');
+                return;
+            }
+            
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+            
+            // Show progress
+            document.getElementById('progress-container').classList.remove('hidden');
+            document.getElementById('results-container').classList.add('hidden');
+            document.getElementById('no-results').classList.add('hidden');
+            
+            // Disable search button
+            const searchBtn = document.getElementById('search-btn');
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = `
+                <div class="flex items-center space-x-3">
+                    <div class="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent"></div>
+                    <span class="text-lg">Searching Videos...</span>
+                    <div class="w-2 h-2 bg-white/70 rounded-full animate-pulse"></div>
+                </div>
+            `;
+            
+            try {
+                const requestBody = {
+                    video_urls: videoUrls,
+                    query: query,
+                    session_id: sessionId,
+                    ...config  // Spread all configuration parameters
+                };
+                
+                // Remove empty language preference
+                if (!requestBody.preferred_language) {
+                    delete requestBody.preferred_language;
+                }
+                
+                console.log('Search request:', requestBody);  // Debug log
+                
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.results, query, config.similarity_threshold);
+                    addToHistory(query, data.results, config.similarity_threshold, config);
+                } else {
+                    throw new Error(data.error || 'Search failed');
+                }
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                alert(`Search failed: ${error.message}`);
+                document.getElementById('no-results').classList.remove('hidden');
+            } finally {
+                // Hide progress and re-enable button
+                document.getElementById('progress-container').classList.add('hidden');
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = `
+                    <i class="fas fa-search text-lg"></i>
+                    <span class="text-lg">Search Videos</span>
+                    <div class="ml-2 w-0 h-0 border-l-4 border-l-white/70 border-y-2 border-y-transparent transition-all duration-300"></div>
+                `;
+            }
+        }
+
+        // Display search results
+        function displayResults(results, query, similarityThreshold) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsList = document.getElementById('results-list');
+            
+            if (!results || results.length === 0) {
+                document.getElementById('no-results').classList.remove('hidden');
+                return;
+            }
+            
+            resultsList.innerHTML = '';
+            
+            results.forEach(videoResult => {
+                const videoCard = createVideoResultCard(videoResult, query, similarityThreshold);
+                resultsList.appendChild(videoCard);
+            });
+            
+            resultsContainer.classList.remove('hidden');
+        }
+
+        // Create video result card
+        function createVideoResultCard(videoResult, query, similarityThreshold) {
+            const card = document.createElement('div');
+            card.className = 'glass-card rounded-2xl p-8 shadow-xl fade-in';
+            
+            const videoId = videoResult.video_id;
+            const results = videoResult.results || [];
+            
+            // Calculate similarity statistics
+            const similarities = results.map(r => r.score);
+            const avgSimilarity = similarities.length > 0 ? similarities.reduce((a, b) => a + b, 0) / similarities.length : 0;
+            const maxSimilarity = similarities.length > 0 ? Math.max(...similarities) : 0;
+            
+            card.innerHTML = `
+                <div class="mb-8">
+                    <div class="flex items-start space-x-6 mb-6">
+                        <div class="video-thumbnail w-24 h-16 rounded-xl flex items-center justify-center shadow-lg">
+                            <i class="fas fa-play text-gray-500 text-2xl"></i>
+                        </div>
+                        <div class="flex-1">
+                            <h3 class="text-2xl font-bold text-gray-800 mb-2">${videoResult.title || `Video: ${videoId}`}</h3>
+                            <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-3">
+                                ${videoResult.uploader ? `
+                                    <span class="flex items-center space-x-1">
+                                        <i class="fas fa-user-circle"></i>
+                                        <span>by ${videoResult.uploader}</span>
+                                    </span>
+                                ` : ''}
+                                ${videoResult.transcript_source ? `
+                                    <span class="flex items-center space-x-1">
+                                        <i class="fas fa-closed-captioning"></i>
+                                        <span>${videoResult.transcript_source} transcript</span>
+                                    </span>
+                                ` : ''}
+                                <span class="flex items-center space-x-1">
+                                    <i class="fas fa-percentage text-purple-500"></i>
+                                    <span>Threshold: ${(similarityThreshold * 100).toFixed(0)}%</span>
+                                </span>
+                            </div>
+                            <div class="flex items-center space-x-4">
+                                <a href="${videoResult.url}" target="_blank" class="text-purple-600 hover:text-purple-800 transition-colors font-medium flex items-center space-x-2">
+                                    <i class="fab fa-youtube text-lg"></i>
+                                    <span>Open on YouTube</span>
+                                    <i class="fas fa-external-link-alt text-sm"></i>
+                                </a>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="bg-gradient-to-r from-purple-100 to-blue-100 rounded-xl p-4 mb-3">
+                                <div class="text-3xl font-bold text-purple-600 mb-1">${results.length}</div>
+                                <div class="text-sm text-gray-600">Result${results.length !== 1 ? 's' : ''} found</div>
+                            </div>
+                            ${results.length > 0 ? `
+                                <div class="bg-gradient-to-r from-green-100 to-emerald-100 rounded-lg p-3">
+                                    <div class="text-lg font-bold text-green-600">${(maxSimilarity * 100).toFixed(1)}%</div>
+                                    <div class="text-xs text-gray-600">Best match</div>
+                                    <div class="text-xs text-gray-500 mt-1">Avg: ${(avgSimilarity * 100).toFixed(1)}%</div>
+                                </div>
+                            ` : ''}
+                            <div class="text-xs text-gray-500 mt-2 italic">Query: "${query}"</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="space-y-6">
+                    ${results.map((result, index) => {
+                        result._index = index + 1;
+                        return createResultItem(result);
+                    }).join('')}
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Create individual result item
+        function createResultItem(result) {
+            const speakers = result.speakers || ['Speaker 1'];
+            const score = (result.score * 100).toFixed(1);
+            
+            // Determine confidence level and color based on score
+            let confidenceLevel, confidenceColor, confidenceIcon;
+            if (result.score >= 0.5) {
+                confidenceLevel = "EXCELLENT";
+                confidenceColor = "bg-green-500";
+                confidenceIcon = "fas fa-check-circle";
+            } else if (result.score >= 0.3) {
+                confidenceLevel = "GOOD";
+                confidenceColor = "bg-blue-500";
+                confidenceIcon = "fas fa-thumbs-up";
+            } else if (result.score >= 0.15) {
+                confidenceLevel = "FAIR";
+                confidenceColor = "bg-yellow-500";
+                confidenceIcon = "fas fa-exclamation-circle";
+            } else {
+                confidenceLevel = "WEAK";
+                confidenceColor = "bg-orange-500";
+                confidenceIcon = "fas fa-question-circle";
+            }
+            
+            return `
+                <div class="result-card bg-white rounded-xl p-6 border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="timestamp-badge px-4 py-2 rounded-full text-sm font-semibold flex items-center space-x-2">
+                                <i class="fas fa-clock text-xs"></i>
+                                <span>${result.timestamp}</span>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                ${speakers.map(speaker => 
+                                    `<span class="speaker-badge px-3 py-1 rounded-full text-sm font-medium flex items-center space-x-1">
+                                        <i class="fas fa-user text-xs"></i>
+                                        <span>${speaker}</span>
+                                    </span>`
+                                ).join('')}
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <div class="text-right">
+                                <div class="flex items-center space-x-2 mb-1">
+                                    <span class="${confidenceColor} text-white px-2 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
+                                        <i class="${confidenceIcon} text-xs"></i>
+                                        <span>${confidenceLevel}</span>
+                                    </span>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <div class="score-indicator w-16 h-3 rounded-full bg-gray-200 overflow-hidden">
+                                        <div class="score-bar rounded-full transition-all duration-1000 ease-out ${confidenceColor}" style="width: ${score}%"></div>
+                                    </div>
+                                    <span class="text-lg font-bold text-gray-700">${score}%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-5">
+                        <p class="text-gray-800 text-lg leading-relaxed">${result.text}</p>
+                    </div>
+                    
+                    <div class="flex items-center justify-between pt-4 border-t border-gray-100">
+                        <div class="flex items-center space-x-4 text-sm text-gray-500">
+                            <span class="flex items-center space-x-1">
+                                <i class="fas fa-stopwatch text-xs"></i>
+                                <span>Duration: ${Math.round(result.duration)}s</span>
+                            </span>
+                            <span class="flex items-center space-x-1">
+                                <i class="fas fa-chart-line text-xs"></i>
+                                <span>Match: ${score}%</span>
+                            </span>
+                            <span class="flex items-center space-x-1">
+                                <i class="fas fa-trophy text-xs"></i>
+                                <span>Rank: #${result._index || result.rank}</span>
+                            </span>
+                        </div>
+                        ${result.youtube_url ? 
+                            `<a href="${result.youtube_url}" target="_blank" 
+                               class="youtube-button px-6 py-3 text-white rounded-lg font-semibold transition-all duration-300 flex items-center space-x-3 transform hover:scale-105">
+                                <i class="fab fa-youtube text-lg"></i>
+                                <span>Watch at ${result.timestamp}</span>
+                                <i class="fas fa-external-link-alt text-sm"></i>
+                            </a>` : ''
+                        }
+                    </div>
+                </div>
+            `;
+        }
+
+        // Add to search history
+        function addToHistory(query, results, similarityThreshold, config) {
+            const historyItem = {
+                id: Date.now(),
+                query: query,
+                timestamp: new Date().toLocaleString(),
+                videoCount: results.length,
+                totalResults: results.reduce((sum, video) => sum + (video.results?.length || 0), 0),
+                similarityThreshold: similarityThreshold,
+                config: config,  // Store full configuration
+                avgSimilarity: results.length > 0 ? 
+                    results.reduce((sum, video) => {
+                        const videoResults = video.results || [];
+                        const videoAvg = videoResults.length > 0 ? 
+                            videoResults.reduce((s, r) => s + r.score, 0) / videoResults.length : 0;
+                        return sum + videoAvg;
+                    }, 0) / results.length : 0
+            };
+            
+            searchHistory.unshift(historyItem);
+            
+            // Keep only last 10 searches
+            if (searchHistory.length > 10) {
+                searchHistory = searchHistory.slice(0, 10);
+            }
+            
+            updateHistoryDisplay();
+            saveHistoryToStorage();
+        }
+
+        // Update history display
+        function updateHistoryDisplay() {
+            const historyContainer = document.getElementById('search-history');
+            const historyList = document.getElementById('history-list');
+            
+            if (searchHistory.length === 0) {
+                historyContainer.classList.add('hidden');
+                return;
+            }
+            
+            historyContainer.classList.remove('hidden');
+            historyList.innerHTML = searchHistory.slice(0, 5).map((item, index) => `
+                <div class="history-item bg-white rounded-xl p-5 border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300" style="animation-delay: ${index * 0.1}s">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-3 h-3 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full"></div>
+                            <span class="font-semibold text-gray-800 text-lg">"${item.query}"</span>
+                        </div>
+                        <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">${item.timestamp}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-4 text-sm text-gray-600">
+                            <span class="flex items-center space-x-1">
+                                <i class="fas fa-video text-purple-500"></i>
+                                <span>${item.videoCount} video${item.videoCount !== 1 ? 's' : ''}</span>
+                            </span>
+                            <span class="flex items-center space-x-1">
+                                <i class="fas fa-search text-blue-500"></i>
+                                <span>${item.totalResults} result${item.totalResults !== 1 ? 's' : ''}</span>
+                            </span>
+                            ${item.similarityThreshold ? `
+                                <span class="flex items-center space-x-1">
+                                    <i class="fas fa-percentage text-green-500"></i>
+                                    <span>${(item.similarityThreshold * 100).toFixed(0)}% thresh</span>
+                                </span>
+                            ` : ''}
+                            ${item.avgSimilarity ? `
+                                <span class="flex items-center space-x-1">
+                                    <i class="fas fa-chart-line text-orange-500"></i>
+                                    <span>${(item.avgSimilarity * 100).toFixed(1)}% avg</span>
+                                </span>
+                            ` : ''}
+                        </div>
+                        <button onclick="repeatSearch('${item.query}')" class="text-purple-600 hover:text-purple-800 transition-colors text-sm font-medium flex items-center space-x-1">
+                            <i class="fas fa-redo text-xs"></i>
+                            <span>Repeat</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Clear results
+        function clearResults() {
+            document.getElementById('results-container').classList.add('hidden');
+            document.getElementById('no-results').classList.add('hidden');
+        }
+
+        // Repeat search with previous query
+        function repeatSearch(query) {
+            document.getElementById('search-query').value = query;
+            // Scroll to search section
+            document.querySelector('.glass-card').scrollIntoView({ behavior: 'smooth' });
+            // Highlight the search input
+            const searchInput = document.getElementById('search-query');
+            searchInput.focus();
+            searchInput.select();
+        }
+
+        // Add example queries for inspiration
+        function addExampleQuery(query) {
+            document.getElementById('search-query').value = query;
+        }
+
+        // Enhanced status update with animations
+        function updateStatus(text, color) {
+            const indicator = document.getElementById('status-indicator');
+            const dot = indicator.querySelector('div');
+            const span = indicator.querySelector('span');
+            
+            // Add animation class based on status
+            if (color === 'green') {
+                dot.className = 'w-3 h-3 rounded-full bg-green-400 status-connected';
+                span.textContent = text;
+            } else {
+                dot.className = 'w-3 h-3 rounded-full bg-red-400 animate-pulse';
+                span.textContent = text;
+            }
+        }
+
+        // Toggle advanced options visibility
+        function toggleAdvancedOptions() {
+            const advancedOptions = document.getElementById('advanced-options');
+            const chevron = document.getElementById('advanced-chevron');
+            
+            if (advancedOptions.classList.contains('hidden')) {
+                advancedOptions.classList.remove('hidden');
+                advancedOptions.style.animation = 'slideInUp 0.3s ease';
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                advancedOptions.classList.add('hidden');
+                chevron.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Apply configuration presets
+        function applyPreset(presetName) {
+            const presets = {
+                fast: {
+                    'similarity-threshold': '0.05',
+                    'chunk-size': '3',
+                    'whisper-model': 'tiny',
+                    'min-results': '1',
+                    'top-k': '3'
+                },
+                balanced: {
+                    'similarity-threshold': '0.1',
+                    'chunk-size': '6',
+                    'whisper-model': 'base',
+                    'min-results': '1',
+                    'top-k': '5'
+                },
+                quality: {
+                    'similarity-threshold': '0.2',
+                    'chunk-size': '8',
+                    'whisper-model': 'small',
+                    'min-results': '2',
+                    'top-k': '10'
+                },
+                precise: {
+                    'similarity-threshold': '0.3',
+                    'chunk-size': '4',
+                    'whisper-model': 'base',
+                    'min-results': '3',
+                    'top-k': '15'
+                }
+            };
+            
+            const preset = presets[presetName];
+            if (preset) {
+                Object.keys(preset).forEach(key => {
+                    const element = document.getElementById(key);
+                    if (element) {
+                        element.value = preset[key];
+                    }
+                });
+                
+                // Show visual feedback
+                const buttons = document.querySelectorAll('[onclick*="applyPreset"]');
+                buttons.forEach(btn => btn.classList.remove('ring-2', 'ring-purple-500'));
+                event.target.classList.add('ring-2', 'ring-purple-500');
+                
+                // Show toast notification
+                if (window.VR && window.VR.utils) {
+                    window.VR.utils.showToast(`Applied ${presetName} preset`, 'success');
+                }
+            }
+        }
+
+        // Reset to default values
+        function resetToDefaults() {
+            const defaults = {
+                'top-k': '5',
+                'similarity-threshold': '0.1',
+                'chunk-size': '6',
+                'whisper-model': 'base',
+                'min-results': '1',
+                'preferred-language': 'en'
+            };
+            
+            Object.keys(defaults).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    element.value = defaults[key];
+                }
+            });
+            
+            // Remove preset highlights
+            const buttons = document.querySelectorAll('[onclick*="applyPreset"]');
+            buttons.forEach(btn => btn.classList.remove('ring-2', 'ring-purple-500'));
+            
+            if (window.VR && window.VR.utils) {
+                window.VR.utils.showToast('Reset to default values', 'info');
+            }
+        }
+
+        // Get current configuration for API calls
+        function getCurrentConfig() {
+            return {
+                top_k: parseInt(document.getElementById('top-k').value),
+                similarity_threshold: parseFloat(document.getElementById('similarity-threshold').value),
+                chunk_size: parseInt(document.getElementById('chunk-size').value),
+                whisper_model: document.getElementById('whisper-model').value,
+                min_results: parseInt(document.getElementById('min-results').value),
+                preferred_language: document.getElementById('preferred-language').value
+            };
+        }
+
+        // Clear search history
+        function clearHistory() {
+            if (confirm('Are you sure you want to clear all search history?')) {
+                searchHistory = [];
+                updateHistoryDisplay();
+                // Also clear from localStorage if we're using it
+                if (typeof(Storage) !== "undefined") {
+                    localStorage.removeItem('videoRetrieverHistory');
+                }
+            }
+        }
+
+        // Save history to localStorage
+        function saveHistoryToStorage() {
+            if (typeof(Storage) !== "undefined") {
+                localStorage.setItem('videoRetrieverHistory', JSON.stringify(searchHistory));
+            }
+        }
+
+        // Load history from localStorage
+        function loadHistoryFromStorage() {
+            if (typeof(Storage) !== "undefined") {
+                const saved = localStorage.getItem('videoRetrieverHistory');
+                if (saved) {
+                    try {
+                        searchHistory = JSON.parse(saved);
+                        updateHistoryDisplay();
+                    } catch (e) {
+                        console.error('Error loading search history:', e);
+                    }
+                }
+            }
+        }
+
+        // Handle Enter key in search input
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search-query');
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    startSearch();
+                }
+            });
+            
+            // Initialize socket connection
+            initializeSocket();
+            
+            // Load search history from localStorage
+            loadHistoryFromStorage();
+            
+            // Add smooth scroll behavior
+            document.documentElement.style.scrollBehavior = 'smooth';
+            
+            // Add focus management for accessibility
+            const firstInput = document.querySelector('.video-url-input input');
+            if (firstInput) {
+                firstInput.focus();
+            }
+        });
+    </script>
+</body>
+</html>
