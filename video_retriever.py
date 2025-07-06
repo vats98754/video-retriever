@@ -215,15 +215,48 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="End-to-end YouTube video search with timestamped results")
     parser.add_argument("url_or_id", help="YouTube URL or video ID")
-    parser.add_argument("query", help="Search query")
+    parser.add_argument("query", nargs='?', help="Search query (optional if using --list-transcripts)")
     parser.add_argument("--top-k", type=int, default=5, help="Number of results to return (default: 5)")
     parser.add_argument("--chunk-size", type=int, default=6, help="Segments per chunk (default: 6)")
     parser.add_argument("--model", default="base", help="Whisper model size (default: base)")
+    parser.add_argument("--list-transcripts", action="store_true", help="List available transcripts for the video")
+    parser.add_argument("--language", help="Preferred language for transcript (e.g., 'en', 'es', 'fr')")
     
     args = parser.parse_args()
     
     try:
         retriever = VideoRetriever(args.model)
+        
+        # Extract video ID for transcript listing
+        if args.url_or_id.startswith('http'):
+            video_id = get_youtube_id(args.url_or_id)
+        else:
+            video_id = args.url_or_id
+        
+        # List transcripts if requested
+        if args.list_transcripts:
+            print(f"📺 Video ID: {video_id}")
+            retriever.transcriber.list_available_transcripts(video_id)
+            return
+        
+        # Validate that query is provided for search
+        if not args.query:
+            print("❌ Error: Search query is required unless using --list-transcripts")
+            parser.print_help()
+            return
+        
+        # Set language preference if specified
+        languages = None
+        if args.language:
+            languages = [args.language, 'en']  # Fallback to English
+        
+        # Modify transcriber to use specified language
+        if languages:
+            # Store original method
+            original_fetch = retriever.transcriber.fetch_youtube_transcript
+            # Override with language preference
+            retriever.transcriber.fetch_youtube_transcript = lambda vid: original_fetch(vid, languages)
+        
         results = retriever.search_video(args.url_or_id, args.query, args.top_k, args.chunk_size)
         
         if results:
