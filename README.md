@@ -20,6 +20,8 @@ python video_retriever.py "VIDEO_ID" "your search query"
 ## ✨ Features
 
 - **🎯 Complete End-to-End Pipeline**: URL/ID + Query → Timestamped YouTube URLs
+- **📋 Smart Transcript Selection**: Automatically uses YouTube captions when available, falls back to Whisper
+- **🌍 Multi-Language Support**: Supports transcripts in multiple languages with automatic fallback
 - **⚡ Smart File Management**: Automatically reuses existing audio/transcripts
 - **🧠 TF-IDF Semantic Search**: Fast, local search with no external dependencies
 - **📁 Organized Storage**: All files stored in `data/VIDEO_ID/` structure
@@ -29,14 +31,21 @@ python video_retriever.py "VIDEO_ID" "your search query"
 
 1. **Input**: YouTube URL or video ID + search query
 2. **Auto-Check**: Uses existing files if available (no re-downloading)
-3. **Download**: Audio via yt-dlp (if needed)
-4. **Transcribe**: Audio to text via Whisper (if needed)  
-5. **Search**: TF-IDF semantic search with smart chunking
+3. **Smart Transcript**: First tries YouTube captions, then falls back to Whisper if needed
+4. **Download**: Audio via yt-dlp (only if no transcript available and Whisper needed)
+5. **Transcribe**: Audio to text via Whisper (only if YouTube captions unavailable)  
+6. **Search**: TF-IDF semantic search with smart chunking
 ## 📋 Examples
 
 ```bash
 # Search for interview tips
 python video_retriever.py "https://youtu.be/0siE31sqz0Q" "interview preparation"
+
+# List available transcripts for a video
+python video_retriever.py "0siE31sqz0Q" --list-transcripts
+
+# Search with language preference
+python video_retriever.py "VIDEO_ID" "search terms" --language es
 
 # Get more results
 python video_retriever.py "0siE31sqz0Q" "storytelling" --top-k 10
@@ -87,17 +96,22 @@ for result in results:
 
 - Python 3.8+
 - yt-dlp (audio download)
-- OpenAI Whisper (transcription)
+- youtube-transcript-api (YouTube captions)
+- OpenAI Whisper (fallback transcription)
 - scikit-learn (TF-IDF search)
 
 ## 💡 Tips
 
+- **YouTube Captions First**: System automatically uses YouTube's captions when available (much faster!)
+- **Language Support**: Use `--language es` for Spanish, `--language fr` for French, etc.
+- **Check Available Languages**: Use `--list-transcripts` to see what languages are available
 - **Reuse Files**: The system automatically detects and reuses existing audio/transcripts
 - **Chunk Size**: Use smaller chunks (3-4) for precise search, larger (8-10) for context
-- **Model Size**: Use `base` for speed, `large` for accuracy
+- **Model Size**: Use `base` for speed, `large` for accuracy (only used when Whisper fallback needed)
 - **Query Tips**: Use descriptive phrases rather than single keywords
 
 - `yt-dlp` - YouTube downloading
-- `openai-whisper` - Speech transcription
+- `youtube-transcript-api` - YouTube captions extraction
+- `openai-whisper` - Speech transcription (fallback)
 - `scikit-learn` - TF-IDF vectorization
 - `numpy` - Numerical operations

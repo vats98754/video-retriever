@@ -3,3 +3,4 @@ openai-whisper
 torch
 torchaudio
 scikit-learn
+youtube-transcript-api
