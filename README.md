@@ -1,15 +1,56 @@
-# YouTube Video Transcript Extractor & Semantic Search
+# 🎥 Video Retriever - AI-Powered YouTube Search
 
-**End-to-end YouTube video processing with timestamped semantic search.**
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
-## 🚀 Quick Start
+**🌐 Live Web Application**: Deploy your own AI-powered video search engine!
+
+## 🚀 Quick Deploy (Web Application)
+
+### One-Click Deploy
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/vats98754/video-retriever)
+
+**Get your app running in 2 minutes:**
+1. Click the deploy button above
+2. Connect your GitHub account  
+3. Your app will be live at `https://your-app-name.onrender.com`
+
+### Alternative Platforms
+- **Railway**: [Deploy to Railway](https://railway.app) - Connect GitHub repo
+- **Heroku**: Use the included `Procfile` for one-click deploy
+- **Docker**: `docker-compose up` for local deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed instructions.
+
+## ✨ Web Application Features
+
+- 🎥 **Multi-Video Search**: Search across multiple YouTube videos simultaneously
+- ⏰ **Timestamped Results**: Get exact timestamps for relevant moments  
+- 🎤 **Speaker Detection**: Identify different speakers in conversations
+- 📱 **Modern UI**: Beautiful, responsive interface with real-time updates
+- 🔍 **Search History**: Keep track of your previous searches
+- 🎯 **Similarity Scoring**: Results ranked by AI-powered relevance scores
+- ⚙️ **Configurable**: Customize search parameters and models
+
+## 💻 Local Development
+
+```bash
+# Clone and start the web interface
+git clone https://github.com/vats98754/video-retriever.git
+cd video-retriever
+
+# Start web application (includes setup)
+./start_web.sh
+
+# Or start with custom options
+./start_web.sh --port 8080 --model small --similarity-threshold 0.2
+```
+
+## 📱 Command Line Usage
 
 **One command to get timestamped YouTube URLs:**
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
-
 # Search any YouTube video - everything is handled automatically!
 python video_retriever.py "https://youtu.be/VIDEO_ID" "your search query"
 

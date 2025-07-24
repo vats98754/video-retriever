@@ -364,14 +364,14 @@ if __name__ == '__main__':
     # Parse command-line arguments
     args = parse_arguments()
     
-    # Update global config with command-line arguments
+    # Update global config with command-line arguments and environment variables
     config.update({
-        'host': args.host,
-        'port': args.port,
-        'debug': args.debug and not args.no_debug,
-        'default_model': args.model,
-        'default_similarity_threshold': args.similarity_threshold,
-        'default_min_results': args.min_results
+        'host': os.environ.get('HOST', args.host),
+        'port': int(os.environ.get('PORT', args.port)),
+        'debug': (args.debug and not args.no_debug) and not os.environ.get('PRODUCTION'),
+        'default_model': os.environ.get('DEFAULT_MODEL', args.model),
+        'default_similarity_threshold': float(os.environ.get('DEFAULT_SIMILARITY_THRESHOLD', args.similarity_threshold)),
+        'default_min_results': int(os.environ.get('DEFAULT_MIN_RESULTS', args.min_results))
     })
     
     # Validate similarity threshold
@@ -379,9 +379,15 @@ if __name__ == '__main__':
         print("❌ Error: Similarity threshold must be between 0.0 and 1.0")
         exit(1)
     
-    # Set secret key if provided
+    # Set secret key if provided or use environment variable
     if args.secret_key:
         app.config['SECRET_KEY'] = args.secret_key
+    elif os.environ.get('SECRET_KEY'):
+        app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY')
+    else:
+        # Generate a random secret key for production
+        import secrets
+        app.config['SECRET_KEY'] = secrets.token_hex(32)
     
     # Test configuration mode - print config and exit
     if args.test_config:

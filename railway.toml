@@ -1,0 +1,12 @@
+version: 2
+services:
+  video-retriever:
+    source: .
+    build:
+      commands:
+        - pip install -r requirements.txt
+    start:
+      command: python app.py --host 0.0.0.0 --port $PORT --no-debug
+    variables:
+      PYTHONUNBUFFERED: 1
+      PYTHON_VERSION: 3.11

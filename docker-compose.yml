@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  video-retriever:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - PRODUCTION=1
+      - HOST=0.0.0.0
+      - PORT=5000
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
